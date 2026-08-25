@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, User, UserStatus } from '@prisma/client';
+import { Prisma, User, UserStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -178,6 +178,67 @@ export class UsersService {
     return this.prisma.user.delete({
       where: { userId },
       select: { userId: true },
+    });
+  }
+
+  /**
+   * Lấy danh sách tất cả các tài khoản người dùng trong hệ thống (chỉ ADMIN).
+   * @param query Bộ lọc tìm kiếm và trạng thái
+   */
+  async adminListUsers(query: { keyword?: string; role?: string; status?: string }) {
+    const where: Prisma.UserWhereInput = {};
+    
+    if (query.role) {
+      where.role = query.role as UserRole;
+    }
+    
+    if (query.status) {
+      where.status = query.status as UserStatus;
+    }
+    
+    if (query.keyword) {
+      where.OR = [
+        { fullName: { contains: query.keyword, mode: 'insensitive' } },
+        { email: { contains: query.keyword, mode: 'insensitive' } },
+        { phone: { contains: query.keyword, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.user.findMany({
+      where,
+      select: {
+        userId: true,
+        email: true,
+        phone: true,
+        fullName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Thay đổi vai trò người dùng (chỉ ADMIN).
+   * @param userId ID người dùng
+   * @param role Vai trò mới cần gán
+   */
+  async adminUpdateRole(userId: string, role: UserRole) {
+    const user = await this.prisma.user.findUnique({ where: { userId } });
+    if (!user) {
+      throw new NotFoundException('Người dùng không tồn tại.');
+    }
+    
+    return this.prisma.user.update({
+      where: { userId },
+      data: { role },
+      select: {
+        userId: true,
+        email: true,
+        role: true,
+        status: true,
+      },
     });
   }
 }

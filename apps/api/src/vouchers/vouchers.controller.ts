@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
 import { VouchersService } from './vouchers.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, VoucherStatus } from '@prisma/client';
 import { RedeemVoucherDto } from './dto/redeem-voucher.dto';
 import { PublicCatalogQueryDto } from './dto/public-catalog-query.dto';
 
@@ -165,5 +165,89 @@ export class VouchersController {
   @Roles(UserRole.ADMIN)
   async adminRejectCampaign(@Req() req: any, @Param('id') campaignId: string) {
     return this.vouchersService.adminRejectCampaign(req.user.userId, campaignId);
+  }
+
+  /**
+   * Admin: Lấy danh sách toàn bộ danh mục dạng phẳng.
+   * GET /vouchers/admin/categories
+   */
+  @Get('admin/categories')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminListCategories() {
+    return this.vouchersService.adminListCategories();
+  }
+
+  /**
+   * Admin: Tạo danh mục voucher mới.
+   * POST /vouchers/admin/categories
+   */
+  @Post('admin/categories')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminCreateCategory(
+    @Body('code') code: string,
+    @Body('nameVi') nameVi: string,
+    @Body('parentId') parentId?: string,
+    @Body('displayOrder') displayOrder?: number,
+  ) {
+    return this.vouchersService.adminCreateCategory({ code, nameVi, parentId, displayOrder });
+  }
+
+  /**
+   * Admin: Cập nhật danh mục voucher.
+   * PATCH /vouchers/admin/categories/:id
+   */
+  @Patch('admin/categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminUpdateCategory(
+    @Param('id') categoryId: string,
+    @Body('nameVi') nameVi?: string,
+    @Body('parentId') parentId?: string,
+    @Body('displayOrder') displayOrder?: number,
+    @Body('isActive') isActive?: boolean,
+  ) {
+    return this.vouchersService.adminUpdateCategory(categoryId, { nameVi, parentId, displayOrder, isActive });
+  }
+
+  /**
+   * Admin: Xóa danh mục voucher.
+   * DELETE /vouchers/admin/categories/:id
+   */
+  @Delete('admin/categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminDeleteCategory(@Param('id') categoryId: string) {
+    return this.vouchersService.adminDeleteCategory(categoryId);
+  }
+
+  /**
+   * Admin: Xem danh sách toàn bộ chiến dịch voucher trên sàn.
+   * GET /vouchers/admin/list
+   */
+  @Get('admin/list')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminListCampaigns(
+    @Query('keyword') keyword?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.vouchersService.adminListCampaigns({ keyword, status });
+  }
+
+  /**
+   * Admin: Cập nhật trạng thái vòng đời chiến dịch voucher.
+   * PATCH /vouchers/admin/:id/status
+   */
+  @Patch('admin/:id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async adminUpdateCampaignStatus(
+    @Req() req: any,
+    @Param('id') campaignId: string,
+    @Body('status') status: VoucherStatus,
+  ) {
+    return this.vouchersService.adminUpdateCampaignStatus(req.user.userId, campaignId, status);
   }
 }

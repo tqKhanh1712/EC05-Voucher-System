@@ -277,14 +277,57 @@ export class VouchersService {
    * Lấy danh sách toàn bộ chiến dịch voucher của một đối tác cụ thể.
    */
   async getPartnerCampaigns(partnerId: string) {
-    return this.prisma.voucherCampaign.findMany({
+    const campaigns = await this.prisma.voucherCampaign.findMany({
       where: { partnerId },
       include: {
         campaignBranches: {
           include: { branch: true },
         },
+        campaignCategories: {
+          include: {
+            category: {
+              select: {
+                nameVi: true,
+                code: true,
+              },
+            },
+          },
+        },
+        orderItems: {
+          select: {
+            quantity: true,
+            unitPrice: true,
+            voucherCodes: {
+              where: {
+                status: 'USED',
+              },
+              select: {
+                codeId: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return campaigns.map((campaign) => {
+      const usedCount = campaign.orderItems.reduce(
+        (sum, item) => sum + item.voucherCodes.length,
+        0,
+      );
+
+      const revenue = campaign.orderItems.reduce(
+        (sum, item) => sum + Number(item.unitPrice) * item.quantity,
+        0,
+      );
+
+      const { orderItems, ...base } = campaign;
+      return {
+        ...base,
+        usedCount,
+        revenue,
+      };
     });
   }
 
@@ -833,5 +876,154 @@ export class VouchersService {
 
       return log;
     });
+  }
+
+  async adminListCategories() {
+    const categories = await this.prisma.voucherCategory.findMany({
+      orderBy: [{ displayOrder: 'asc' }, { nameVi: 'asc' }],
+      include: {
+        _count: {
+          select: { campaignCategories: true },
+        },
+      },
+    });
+
+    return categories.map((cat) => ({
+      ...cat,
+      campaignCount: cat._count.campaignCategories,
+    }));
+  }
+
+  /**
+   * Admin: Tạo danh mục voucher mới (BR-ADM-05).
+   */
+  async adminCreateCategory(data: { code: string; nameVi: string; parentId?: string; displayOrder?: number }) {
+    const existing = await this.prisma.voucherCategory.findUnique({
+      where: { code: data.code },
+    });
+    if (existing) {
+      throw new BadRequestException('Mã danh mục này đã tồn tại trong hệ thống.');
+    }
+
+    return this.prisma.voucherCategory.create({
+      data: {
+        code: data.code,
+        nameVi: data.nameVi,
+        parentId: data.parentId || null,
+        displayOrder: data.displayOrder ?? 0,
+        isActive: true,
+      },
+    });
+  }
+
+  /**
+   * Admin: Cập nhật danh mục voucher (BR-ADM-05).
+   */
+  async adminUpdateCategory(categoryId: string, data: { nameVi?: string; parentId?: string; displayOrder?: number; isActive?: boolean }) {
+    const category = await this.prisma.voucherCategory.findUnique({
+      where: { categoryId },
+    });
+    if (!category) {
+      throw new NotFoundException('Không tìm thấy danh mục yêu cầu.');
+    }
+
+    return this.prisma.voucherCategory.update({
+      where: { categoryId },
+      data: {
+        nameVi: data.nameVi,
+        parentId: data.parentId !== undefined ? (data.parentId || null) : undefined,
+        displayOrder: data.displayOrder,
+        isActive: data.isActive,
+      },
+    });
+  }
+
+  /**
+   * Admin: Xóa danh mục voucher (BR-ADM-05).
+   */
+  async adminDeleteCategory(categoryId: string) {
+    const campaignCount = await this.prisma.campaignCategory.count({
+      where: { categoryId },
+    });
+    if (campaignCount > 0) {
+      throw new BadRequestException('Không thể xóa danh mục này vì đang có chiến dịch voucher liên kết.');
+    }
+
+    const childrenCount = await this.prisma.voucherCategory.count({
+      where: { parentId: categoryId },
+    });
+    if (childrenCount > 0) {
+      throw new BadRequestException('Không thể xóa danh mục này vì có danh mục con đang trực thuộc.');
+    }
+
+    return this.prisma.voucherCategory.delete({
+      where: { categoryId },
+    });
+  }
+
+  /**
+   * Admin: Lấy danh sách toàn bộ chiến dịch voucher (BR-ADM-03).
+   * @param query Bộ lọc từ khóa và trạng thái
+   */
+  async adminListCampaigns(query: { keyword?: string; status?: string }) {
+    const where: Prisma.VoucherCampaignWhereInput = {};
+    if (query.status) {
+      where.status = query.status as VoucherStatus;
+    }
+    if (query.keyword) {
+      where.OR = [
+        { title: { contains: query.keyword, mode: 'insensitive' } },
+        { description: { contains: query.keyword, mode: 'insensitive' } },
+        { partner: { companyName: { contains: query.keyword, mode: 'insensitive' } } },
+      ];
+    }
+    return this.prisma.voucherCampaign.findMany({
+      where,
+      include: {
+        partner: {
+          select: {
+            companyName: true,
+            representative: true,
+          },
+        },
+        campaignBranches: {
+          include: {
+            branch: true,
+          },
+        },
+        // Bao gồm danh mục tiếng Việt từ bảng quan hệ CampaignCategory
+        campaignCategories: {
+          include: {
+            category: {
+              select: {
+                nameVi: true,
+                code: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Admin: Cập nhật trạng thái vòng đời của một chiến dịch voucher (BR-ADM-03).
+   */
+  async adminUpdateCampaignStatus(adminId: string, campaignId: string, status: VoucherStatus) {
+    const campaign = await this.prisma.voucherCampaign.findUnique({
+      where: { campaignId },
+    });
+    if (!campaign) {
+      throw new NotFoundException('Không tìm thấy chiến dịch voucher.');
+    }
+
+    const updated = await this.prisma.voucherCampaign.update({
+      where: { campaignId },
+      data: { status },
+    });
+
+    await this.auditService.logAction(adminId, 'UPDATE_CAMPAIGN_STATUS', 'VoucherCampaign', campaignId);
+    return updated;
   }
 }

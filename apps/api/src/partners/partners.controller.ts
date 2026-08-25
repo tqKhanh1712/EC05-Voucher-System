@@ -6,7 +6,7 @@ import { UpdatePartnerDto } from './dto/update-partner.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { UserRole, PartnerAccountStatus } from '@prisma/client';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 
@@ -174,5 +174,29 @@ export class PartnersController {
   @Roles(UserRole.ADMIN)
   async adminRejectPartner(@Req() req: any, @Param('id') partnerId: string) {
     return this.partnersService.adminRejectPartner(req.user.userId, partnerId);
+  }
+
+  /**
+   * Admin: Khóa hoặc kích hoạt hoạt động tài khoản đối tác.
+   * PATCH /partners/admin/:id/toggle-status
+   */
+  @Patch('admin/:id/toggle-status')
+  @Roles(UserRole.ADMIN)
+  async adminTogglePartnerStatus(
+    @Req() req: any,
+    @Param('id') partnerId: string,
+    @Body('status') status: PartnerAccountStatus,
+  ) {
+    return this.partnersService.adminTogglePartnerStatus(req.user.userId, partnerId, status);
+  }
+
+  /**
+   * Admin: Xem danh sách chi nhánh của một đối tác.
+   * GET /partners/admin/:id/branches
+   */
+  @Get('admin/:id/branches')
+  @Roles(UserRole.ADMIN)
+  async adminGetPartnerBranches(@Param('id') partnerId: string) {
+    return this.partnersService.adminGetPartnerBranches(partnerId);
   }
 }

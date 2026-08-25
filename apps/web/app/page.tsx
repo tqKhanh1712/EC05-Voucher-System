@@ -257,7 +257,7 @@ function HomePageContent() {
                   cancelPendingPriceFilter();
                   const val: CatalogFilters['sortPrice'] = sortPrice === 'asc' ? '' : 'asc';
                   setSortPrice(val);
-                  const filters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
+                  const filters: CatalogFilters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
                   updateBrowserFilters(filters);
                   void fetchCatalog(filters);
                 }}
@@ -275,7 +275,7 @@ function HomePageContent() {
                   cancelPendingPriceFilter();
                   const val: CatalogFilters['sortPrice'] = sortPrice === 'desc' ? '' : 'desc';
                   setSortPrice(val);
-                  const filters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
+                  const filters: CatalogFilters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
                   updateBrowserFilters(filters);
                   void fetchCatalog(filters);
                 }}

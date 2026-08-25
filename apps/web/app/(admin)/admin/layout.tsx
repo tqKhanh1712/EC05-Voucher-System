@@ -12,7 +12,9 @@ import {
   LogOut, 
   Menu, 
   LayoutDashboard,
-  ShoppingBag
+  ShoppingBag,
+  UserCog,
+  FolderTree
 } from 'lucide-react';
 import {
   Sheet,
@@ -34,6 +36,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Duyệt Đối tác', href: '/admin/partners', icon: Users },
     { name: 'Duyệt Voucher', href: '/admin/vouchers', icon: Ticket },
     { name: 'Quản lý Đơn hàng', href: '/admin/orders', icon: ShoppingBag },
+    { name: 'Quản lý Người dùng', href: '/admin/users', icon: UserCog },
+    { name: 'Quản lý Danh mục', href: '/admin/categories', icon: FolderTree },
     { name: 'Nhật ký hệ thống', href: '/admin/audit-logs', icon: ShieldAlert },
   ];
 

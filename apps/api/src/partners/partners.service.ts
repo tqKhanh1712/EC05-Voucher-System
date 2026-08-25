@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
-import { PartnerApprovalStatus, Prisma, UserStatus } from '@prisma/client';
+import { PartnerAccountStatus, PartnerApprovalStatus, Prisma, UserStatus } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -136,6 +136,17 @@ export class PartnersService {
       0,
     );
 
+    const usedVouchers = await this.prisma.voucherCode.count({
+      where: {
+        status: 'USED',
+        orderItem: {
+          campaign: {
+            partnerId,
+          },
+        },
+      },
+    });
+
     return {
       partnerName: partner.companyName,
       totalCampaigns,
@@ -143,6 +154,7 @@ export class PartnersService {
       soldVouchers,
       customerCount,
       revenue,
+      usedVouchers,
     };
   }
 
@@ -410,28 +422,113 @@ export class PartnersService {
    * Admin: Lấy tổng quan dashboard hệ thống.
    */
   async getAdminDashboard() {
-    const [partnerCount, campaignCount, successfulOrderCount, revenueSummary] =
-      await Promise.all([
-        this.prisma.partner.count(),
-        this.prisma.voucherCampaign.count(),
-        this.prisma.order.count({
-          where: {
-            paymentStatus: 'PAID',
+    const [
+      partnerCount,
+      campaignCount,
+      successfulOrderCount,
+      revenueSummary,
+      customerCount,
+      adminCount,
+      staffCount,
+      approvedCount,
+      pendingCount,
+      draftCount,
+      rejectedCount,
+      expiredCount,
+    ] = await Promise.all([
+      this.prisma.partner.count(),
+      this.prisma.voucherCampaign.count(),
+      this.prisma.order.count({
+        where: {
+          paymentStatus: 'PAID',
+        },
+      }),
+      this.prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          paymentStatus: 'PAID',
+        },
+      }),
+      this.prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      this.prisma.user.count({ where: { role: 'ADMIN' } }),
+      this.prisma.user.count({ where: { role: 'PARTNER_STAFF' } }),
+      this.prisma.voucherCampaign.count({ where: { status: 'APPROVED' } }),
+      this.prisma.voucherCampaign.count({ where: { status: 'PENDING_APPROVAL' } }),
+      this.prisma.voucherCampaign.count({ where: { status: 'DRAFT' } }),
+      this.prisma.voucherCampaign.count({ where: { status: 'REJECTED' } }),
+      this.prisma.voucherCampaign.count({ where: { status: 'EXPIRED' } }),
+    ]);
+
+    // Truy vấn dữ liệu để tính hiệu suất đối tác
+    const partnersData = await this.prisma.partner.findMany({
+      include: {
+        campaigns: {
+          include: {
+            orderItems: {
+              where: {
+                order: { paymentStatus: 'PAID' },
+              },
+              include: {
+                voucherCodes: true,
+              },
+            },
           },
-        }),
-        this.prisma.order.aggregate({
-          _sum: { totalAmount: true },
-          where: {
-            paymentStatus: 'PAID',
-          },
-        }),
-      ]);
+        },
+      },
+    });
+
+    const partnerPerformance = partnersData.map((p) => {
+      const totalCampaigns = p.campaigns.length;
+      let vouchersSold = 0;
+      let revenue = 0;
+      let usedCount = 0;
+
+      p.campaigns.forEach((camp) => {
+        camp.orderItems.forEach((item) => {
+          vouchersSold += item.quantity;
+          revenue += item.quantity * Number(item.unitPrice);
+          item.voucherCodes.forEach((code) => {
+            if (code.status === 'USED') {
+              usedCount++;
+            }
+          });
+        });
+      });
+
+      const usageRate = vouchersSold > 0 ? (usedCount / vouchersSold) * 100 : 0;
+
+      return {
+        partnerId: p.partnerId,
+        companyName: p.companyName,
+        totalCampaigns,
+        vouchersSold,
+        revenue,
+        usageRate: Math.round(usageRate * 10) / 10,
+      };
+    });
+
+    // Sắp xếp giảm dần theo doanh thu của đối tác
+    partnerPerformance.sort((a, b) => b.revenue - a.revenue);
 
     return {
       totalPartners: partnerCount,
       totalCampaigns: campaignCount,
       totalSuccessfulOrders: successfulOrderCount,
       totalRevenue: Number(revenueSummary._sum.totalAmount ?? 0),
+      userStats: {
+        totalCustomers: customerCount,
+        totalPartners: partnerCount,
+        totalAdmins: adminCount,
+        totalStaffs: staffCount,
+      },
+      campaignStats: {
+        approved: approvedCount,
+        pending: pendingCount,
+        draft: draftCount,
+        rejected: rejectedCount,
+        expired: expiredCount,
+      },
+      partnerPerformance: partnerPerformance, // Lấy toàn bộ danh sách đối tác
     };
   }
 
@@ -530,5 +627,57 @@ export class PartnersService {
       partnerId,
     );
     return res;
+  }
+
+  /**
+   * Admin: Khóa/Mở khóa tài khoản đối tác.
+   */
+  async adminTogglePartnerStatus(adminId: string, partnerId: string, status: PartnerAccountStatus) {
+    const partner = await this.prisma.partner.findUnique({
+      where: { partnerId },
+    });
+
+    if (!partner) {
+      throw new NotFoundException('Không tìm thấy đối tác.');
+    }
+
+    const userStatus = status === PartnerAccountStatus.ACTIVE ? UserStatus.ACTIVE : UserStatus.LOCKED;
+
+    const res = await this.prisma.$transaction(async (tx) => {
+      // 1. Cập nhật trạng thái đối tác
+      const updatedPartner = await tx.partner.update({
+        where: { partnerId },
+        data: { accountStatus: status },
+      });
+
+      // 2. Đồng bộ khóa/mở khóa User đăng nhập tương ứng
+      await tx.user.update({
+        where: { userId: partnerId },
+        data: { status: userStatus },
+      });
+
+      return updatedPartner;
+    });
+
+    const action = status === PartnerAccountStatus.ACTIVE ? 'ACTIVATE_PARTNER' : 'LOCK_PARTNER';
+    await this.auditService.logAction(adminId, action, 'Partner', partnerId);
+    return res;
+  }
+
+  /**
+   * Admin: Xem chi nhánh của một đối tác bất kỳ.
+   */
+  async adminGetPartnerBranches(partnerId: string) {
+    const partner = await this.prisma.partner.findUnique({
+      where: { partnerId },
+    });
+    if (!partner) {
+      throw new NotFoundException('Không tìm thấy đối tác.');
+    }
+
+    return this.prisma.branch.findMany({
+      where: { partnerId },
+      orderBy: { name: 'asc' },
+    });
   }
 }

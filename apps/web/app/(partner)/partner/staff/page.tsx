@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { getErrorMessage } from '../../../../lib/errors';
 import { useAuth } from '../../../../context/AuthContext';
@@ -19,7 +19,9 @@ import {
   Edit2,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  Search,
+  Calendar
 } from 'lucide-react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -149,6 +151,8 @@ export default function PartnerStaffPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Modals state
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -293,7 +297,6 @@ export default function PartnerStaffPage() {
     setShowEditConfirmPass(false);
   };
 
-  // Handle create
   const onCreateSubmit = async (data: CreateStaffFormInput) => {
     setSubmitting(true);
     setErrorMsg(null);
@@ -327,14 +330,12 @@ export default function PartnerStaffPage() {
     }
   };
 
-  // Handle edit
   const onEditSubmit = async (data: EditStaffFormInput) => {
     if (!editingStaff) return;
     setSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      // Build request body dynamically
       const body: { fullName: string; branchId: string; password?: string } = {
         fullName: data.fullName,
         branchId: data.branchId,
@@ -358,7 +359,6 @@ export default function PartnerStaffPage() {
     }
   };
 
-  // Handle delete
   const handleDeleteStaff = async (staff: StaffUser) => {
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -372,6 +372,14 @@ export default function PartnerStaffPage() {
       setErrorMsg(getErrorMessage(error, 'Không thể xóa tài khoản nhân viên này.'));
     }
   };
+
+  const filteredStaff = useMemo(() => {
+    return staffList.filter(s => 
+      (s.fullName && s.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.email && s.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.phone && s.phone.includes(searchTerm))
+    );
+  }, [staffList, searchTerm]);
 
   if (authLoading || loading) {
     return (
@@ -391,6 +399,7 @@ export default function PartnerStaffPage() {
         <span className="font-semibold text-foreground">Quản lý nhân viên</span>
       </div>
 
+      {/* TIÊU ĐỀ & TÌM KIẾM */}
       <div className="pb-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-foreground flex items-center gap-2">
@@ -400,24 +409,36 @@ export default function PartnerStaffPage() {
           <p className="text-xs text-muted mt-1">Cấp tài khoản, chỉnh sửa địa điểm gán chi nhánh hoặc xóa nhân sự thu ngân.</p>
         </div>
 
-        <button
-          onClick={() => {
-            setSuccessMsg(null);
-            setErrorMsg(null);
-            resetCreate();
-            setShowPass(false);
-            setShowConfirmPass(false);
-            setCreateModalOpen(true);
-          }}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white px-4 py-2.5 text-xs font-bold transition-colors shadow shadow-primary/10"
-        >
-          <UserPlus className="h-4 w-4" />
-          Thêm nhân viên mới
-        </button>
+        <div className="flex items-center gap-2 max-w-md w-full sm:justify-end">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm theo họ tên, email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="block w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-xs text-foreground placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            />
+          </div>
+          <button
+            onClick={() => {
+              setSuccessMsg(null);
+              setErrorMsg(null);
+              resetCreate();
+              setShowPass(false);
+              setShowConfirmPass(false);
+              setCreateModalOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white px-3 py-2 text-xs font-semibold transition-colors shadow shadow-primary/10 shrink-0"
+          >
+            <UserPlus className="h-4 w-4" />
+            Thêm nhân viên
+          </button>
+        </div>
       </div>
 
       {successMsg && (
-        <div className="bg-green-500/10 border border-green-500/20 text-green-800 text-xs p-4 rounded-xl flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-800 text-sm">
           <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
@@ -431,75 +452,88 @@ export default function PartnerStaffPage() {
       )}
 
       {/* DANH SÁCH NHÂN VIÊN */}
-      {staffList.length === 0 ? (
+      {filteredStaff.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
           <Users className="h-10 w-10 text-muted mx-auto" />
-          <h3 className="text-sm font-bold text-foreground">Chưa có tài khoản nhân viên nào</h3>
+          <h3 className="text-sm font-bold text-foreground">Không tìm thấy nhân viên phù hợp</h3>
           <p className="text-xs text-muted max-w-sm mx-auto">
-            Hãy nhấp vào nút &quot;Thêm nhân viên mới&quot; để tạo tài khoản phân quyền quét mã cho cửa hàng.
+            Hãy nhấp vào nút &quot;Thêm nhân viên&quot; ở trên hoặc thay đổi bộ lọc tìm kiếm.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {staffList.map((staff) => {
-            const date = new Date(staff.createdAt).toLocaleDateString('vi-VN');
-            return (
-              <div key={staff.userId} className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow relative">
-                
-                {/* Actions overlay buttons on card top-right */}
-                <div className="absolute top-4 right-4 flex items-center gap-1.5">
-                  <button
-                    onClick={() => openEditModal(staff)}
-                    className="p-1.5 text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors"
-                    title="Chỉnh sửa tài khoản"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setStaffToDelete(staff)}
-                    className="p-1.5 text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Xóa nhân viên"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-start gap-3 pr-16 min-w-0">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
-                    {staff.fullName?.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-foreground text-sm leading-snug truncate max-w-full">{staff.fullName}</h3>
-                    <span className="text-[10px] text-muted flex items-center gap-1 mt-0.5 min-w-0">
-                      <Store className="h-3 w-3 text-primary shrink-0" />
-                      <span className="shrink-0">Chi nhánh:</span>
-                      <span className="font-semibold text-foreground truncate max-w-[12rem] inline-block align-bottom min-w-0">
-                        {staff.branch?.name || 'Chưa gán'}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="border-t border-border/40 pt-3 text-xs text-muted space-y-1.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="shrink-0">Email:</span>
-                    <span className="font-semibold text-foreground text-right break-all min-w-0 flex-1">{staff.email}</span>
-                  </div>
-                  {staff.phone && (
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="shrink-0">Điện thoại:</span>
-                      <span className="font-semibold text-foreground text-right break-all min-w-0 flex-1">{staff.phone}</span>
-                    </div>
-                  )}
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="shrink-0">Ngày tạo:</span>
-                    <span className="font-semibold text-foreground text-right min-w-0 flex-1">{date}</span>
-                  </div>
-                </div>
-
-              </div>
-            );
-          })}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-secondary/40 border-b border-border text-foreground/80 font-bold uppercase tracking-wider">
+                  <th className="p-4">Họ và Tên</th>
+                  <th className="p-4">Chi nhánh gán</th>
+                  <th className="p-4">Tài khoản Liên hệ</th>
+                  <th className="p-4">Ngày tạo</th>
+                  <th className="p-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredStaff.map((staff) => (
+                  <tr key={staff.userId} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                          {staff.fullName?.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground text-xs">{staff.fullName}</p>
+                          <p className="text-[10px] text-muted truncate max-w-[150px]">{staff.userId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="text-foreground font-semibold flex items-center gap-1.5">
+                        <Store className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span>{staff.branch?.name || 'Chưa gán'}</span>
+                      </div>
+                    </td>
+                    <td className="p-4 space-y-1">
+                      <div className="text-[11px] text-foreground font-medium flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5 text-muted shrink-0" />
+                        <span>{staff.email}</span>
+                      </div>
+                      {staff.phone && (
+                        <div className="text-[11px] text-muted flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-muted shrink-0" />
+                          <span>{staff.phone}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-[11px] text-muted whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" />
+                        <span>{new Date(staff.createdAt).toLocaleDateString('vi-VN')}</span>
+                      </div>
+                    </td>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(staff)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold border border-border bg-card text-foreground hover:bg-secondary/35 rounded-md transition-colors"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                          Sửa
+                        </button>
+                        <button
+                          onClick={() => setStaffToDelete(staff)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 rounded-md transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Xóa
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -548,7 +582,7 @@ export default function PartnerStaffPage() {
                   )}
                 />
                 {errorsCreate.branchId && (
-                  <p className="text-[9px] text-danger">{errorsCreate.branchId.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.branchId.message}</p>
                 )}
               </div>
 
@@ -565,7 +599,7 @@ export default function PartnerStaffPage() {
                   <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                 </div>
                 {errorsCreate.fullName && (
-                  <p className="text-[9px] text-primary">{errorsCreate.fullName.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.fullName.message}</p>
                 )}
               </div>
 
@@ -582,7 +616,7 @@ export default function PartnerStaffPage() {
                   <Mail className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                 </div>
                 {errorsCreate.email && (
-                  <p className="text-[9px] text-primary">{errorsCreate.email.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.email.message}</p>
                 )}
               </div>
 
@@ -606,7 +640,7 @@ export default function PartnerStaffPage() {
                   </button>
                 </div>
                 {errorsCreate.password && (
-                  <p className="text-[9px] text-primary">{errorsCreate.password.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.password.message}</p>
                 )}
               </div>
 
@@ -630,7 +664,7 @@ export default function PartnerStaffPage() {
                   </button>
                 </div>
                 {errorsCreate.confirmPassword && (
-                  <p className="text-[9px] text-primary">{errorsCreate.confirmPassword.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.confirmPassword.message}</p>
                 )}
               </div>
 
@@ -647,7 +681,7 @@ export default function PartnerStaffPage() {
                   <Phone className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                 </div>
                 {errorsCreate.phone && (
-                  <p className="text-[9px] text-primary">{errorsCreate.phone.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsCreate.phone.message}</p>
                 )}
               </div>
 
@@ -725,7 +759,7 @@ export default function PartnerStaffPage() {
                   )}
                 />
                 {errorsEdit.branchId && (
-                  <p className="text-[9px] text-danger">{errorsEdit.branchId.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsEdit.branchId.message}</p>
                 )}
               </div>
 
@@ -741,7 +775,7 @@ export default function PartnerStaffPage() {
                   <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                 </div>
                 {errorsEdit.fullName && (
-                  <p className="text-[9px] text-primary">{errorsEdit.fullName.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsEdit.fullName.message}</p>
                 )}
               </div>
 
@@ -765,7 +799,7 @@ export default function PartnerStaffPage() {
                   </button>
                 </div>
                 {errorsEdit.password && (
-                  <p className="text-[9px] text-primary">{errorsEdit.password.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsEdit.password.message}</p>
                 )}
               </div>
 
@@ -789,7 +823,7 @@ export default function PartnerStaffPage() {
                   </button>
                 </div>
                 {errorsEdit.confirmPassword && (
-                  <p className="text-[9px] text-primary">{errorsEdit.confirmPassword.message}</p>
+                  <p className="text-[9px] text-red-500">{errorsEdit.confirmPassword.message}</p>
                 )}
               </div>
 

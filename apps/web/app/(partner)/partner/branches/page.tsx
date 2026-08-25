@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../../../../lib/api';
 import { getErrorMessage } from '../../../../lib/errors';
-import { MapPin, Plus, Edit2, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Plus, Edit2, Trash2, AlertCircle, CheckCircle, ChevronRight, Search } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -49,6 +49,8 @@ export default function PartnerBranchesPage() {
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState('');
 
   const {
     register,
@@ -103,14 +105,12 @@ export default function PartnerBranchesPage() {
     };
     try {
       if (editingBranch) {
-        // Cập nhật chi nhánh
         await apiRequest<void>(`/partners/branches/${editingBranch.branchId}`, {
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
         setSuccessMsg('Cập nhật chi nhánh thành công!');
       } else {
-        // Tạo chi nhánh mới
         await apiRequest<void>('/partners/branches', {
           method: 'POST',
           body: JSON.stringify(payload),
@@ -119,13 +119,11 @@ export default function PartnerBranchesPage() {
       }
       setModalOpen(false);
       loadBranches();
-      // Tự động tắt thông báo thành công sau 3 giây
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (error: unknown) {
       setErrorMsg(getErrorMessage(error, 'Có lỗi xảy ra.'));
     }
   };
-
 
   const handleDelete = async (branchId: string) => {
     setErrorMsg(null);
@@ -142,6 +140,13 @@ export default function PartnerBranchesPage() {
     }
   };
 
+  const filteredBranches = useMemo(() => {
+    return branches.filter(b => 
+      b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.address && b.address.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [branches, searchTerm]);
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -153,87 +158,111 @@ export default function PartnerBranchesPage() {
   return (
     <div className="space-y-6">
       
-      {/* TIÊU ĐỀ & NÚT THÊM */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Chi nhánh Cửa hàng</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            Quản lý vị trí địa lý và các chi nhánh hoạt động áp dụng voucher
-          </p>
-        </div>
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center rounded-lg bg-primary py-2.5 px-4 text-sm font-semibold text-white hover:bg-primary-hover transition-colors shadow-sm"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Thêm chi nhánh
-        </button>
+      {/* BREADCRUMB */}
+      <div className="flex items-center gap-2 text-xs text-muted">
+        <span>Partner Portal</span>
+        <ChevronRight className="h-3.5 w-3.5" />
+        <span className="font-semibold text-foreground">Chi nhánh cửa hàng</span>
       </div>
 
-      {/* THÔNG BÁO DƯỚI DẠNG TOAST */}
+      {/* TIÊU ĐỀ & TÌM KIẾM */}
+      <div className="pb-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-foreground flex items-center gap-2">
+            <MapPin className="h-6 w-6 text-primary" />
+            Chi nhánh Cửa hàng
+          </h1>
+          <p className="text-xs text-muted mt-1">
+            Quản lý vị trí địa lý và các chi nhánh hoạt động áp dụng voucher.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 max-w-md w-full sm:justify-end">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm chi nhánh..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="block w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-xs text-foreground placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            />
+          </div>
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 px-3 py-2 text-xs font-semibold text-primary-foreground transition shadow shadow-primary/10 shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            Thêm chi nhánh
+          </button>
+        </div>
+      </div>
+
+      {/* THÔNG BÁO */}
       {successMsg && (
-        <div className="flex items-center gap-3 rounded-lg bg-green-500/10 p-4 border border-green-500/20 text-green-800 text-sm">
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-800 text-sm">
           <CheckCircle className="h-5 w-5 shrink-0 text-green-600" />
           <p className="font-medium">{successMsg}</p>
         </div>
       )}
-
       {errorMsg && (
-        <div className="flex items-center gap-3 rounded-lg bg-red-500/10 p-4 border border-red-500/20 text-red-800 text-sm">
-          <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
-          <p className="font-medium">{errorMsg}</p>
+        <div className="bg-red-500/10 border border-red-500/20 text-red-800 text-xs p-4 rounded-xl flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
       {/* DANH SÁCH CHI NHÁNH */}
-      {branches.length === 0 ? (
-        <div className="text-center py-16 rounded-xl border border-dashed border-border bg-card">
-          <MapPin className="h-10 w-10 text-muted/50 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-foreground">Chưa có chi nhánh nào</h3>
-          <p className="text-xs text-muted mt-1 max-w-sm mx-auto leading-relaxed">
-            Bạn cần khởi tạo ít nhất một chi nhánh cửa hàng để có thể gán địa điểm áp dụng khi tạo chiến dịch voucher.
-          </p>
-          <button
-            onClick={openAddModal}
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-secondary py-2 px-4 text-xs font-semibold text-primary hover:bg-secondary/70 transition-colors"
-          >
-            Tạo ngay chi nhánh đầu tiên
-          </button>
+      {filteredBranches.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
+          <MapPin className="h-10 w-10 text-muted mx-auto" />
+          <h3 className="text-sm font-bold text-foreground">Không tìm thấy chi nhánh</h3>
+          <p className="text-xs text-muted">Bấm nút &quot;Thêm chi nhánh&quot; ở trên hoặc thay đổi bộ lọc tìm kiếm.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {branches.map((branch) => (
-            <div
-              key={branch.branchId}
-              className="flex flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md transition-all duration-200"
-            >
-              <div>
-                <h3 className="text-base font-bold text-foreground truncate">{branch.name}</h3>
-                <div className="mt-3 flex items-start gap-2 text-xs text-muted leading-relaxed">
-                  <MapPin className="h-4 w-4 shrink-0 text-primary mt-0.5" />
-                  <p>{branch.address || 'Không có thông tin địa chỉ'}</p>
-                </div>
-              </div>
-
-              {/* HÀNH ĐỘNG */}
-              <div className="mt-5 border-t border-border/60 pt-4 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => openEditModal(branch)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-border text-foreground hover:bg-secondary/50 transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                  Sửa
-                </button>
-                <button
-                  onClick={() => setBranchToDelete(branch)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Xóa
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-secondary/40 border-b border-border text-foreground/80 font-bold uppercase tracking-wider">
+                  <th className="p-4">Tên chi nhánh / Cửa hàng</th>
+                  <th className="p-4">Địa chỉ chi tiết</th>
+                  <th className="p-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredBranches.map((branch) => (
+                  <tr key={branch.branchId} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4 font-bold text-foreground">{branch.name}</td>
+                    <td className="p-4 text-muted leading-relaxed max-w-md">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span>{branch.address || 'Chưa cập nhật địa chỉ'}</span>
+                      </div>
+                    </td>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(branch)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold border border-border bg-card text-foreground hover:bg-secondary/35 rounded-md transition-colors"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                          Sửa
+                        </button>
+                        <button
+                          onClick={() => setBranchToDelete(branch)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 rounded-md transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Xóa
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -262,10 +291,10 @@ export default function PartnerBranchesPage() {
                 {...register('name')}
                 placeholder="Ví dụ: Chi nhánh Quận 1"
                 aria-invalid={Boolean(errors.name)}
-                className="block w-full rounded-ui-md border border-input bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-brand focus:ring-3 focus:ring-brand/20 aria-invalid:border-danger aria-invalid:ring-danger/20"
+                className="block w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
               />
               {errors.name && (
-                <p className="mt-1 text-xs text-danger">{errors.name.message}</p>
+                <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>
               )}
             </div>
 
@@ -279,10 +308,10 @@ export default function PartnerBranchesPage() {
                 {...register('address')}
                 placeholder="Ví dụ: 123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. HCM"
                 aria-invalid={Boolean(errors.address)}
-                className="block w-full resize-none rounded-ui-md border border-input bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-brand focus:ring-3 focus:ring-brand/20 aria-invalid:border-danger aria-invalid:ring-danger/20"
+                className="block w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
               />
               {errors.address && (
-                <p className="mt-1 text-xs text-danger">{errors.address.message}</p>
+                <p className="mt-1 text-xs text-red-500">{errors.address.message}</p>
               )}
             </div>
 
