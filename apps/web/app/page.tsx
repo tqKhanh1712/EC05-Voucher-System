@@ -1,11 +1,12 @@
 'use client';
 
-import React, { Suspense, useEffect, useState, useCallback } from 'react';
+import React, { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { apiRequest } from '../lib/api';
 import { getErrorMessage } from '../lib/errors';
 import Header from '../components/Header';
 import FilterSidebar from '../components/FilterSidebar';
 import VoucherCard, { type VoucherCampaignCard } from '../components/VoucherCard';
+import ProductCardSkeleton from '../components/ProductCardSkeleton';
 import { ArrowRight, ShieldAlert, Ticket, Grid, ArrowUpNarrowWide, ArrowDownWideNarrow } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -32,6 +33,8 @@ interface CatalogCategoryResponse {
   categories: CatalogCategory[];
   totalCampaignCount: number;
 }
+
+const PRODUCT_SKELETON_COUNT = 6;
 
 function buildCatalogUrl(filters: CatalogFilters) {
   const params = new URLSearchParams();
@@ -72,6 +75,7 @@ function HomePageContent() {
   const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice);
   const [sortPrice, setSortPrice] = useState<'asc'|'desc'|''>(initialFilters.sortPrice || '');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const priceDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCatalog = useCallback(async (filters: CatalogFilters) => {
     setLoading(true);
@@ -108,7 +112,7 @@ function HomePageContent() {
     void loadInitialCatalog();
   }, [initialFilters]);
 
-  const updateBrowserFilters = (filters: CatalogFilters) => {
+  const updateBrowserFilters = useCallback((filters: CatalogFilters) => {
     const params = new URLSearchParams();
     if (filters.keyword) params.set('keyword', filters.keyword);
     if (filters.categoryCode) params.set('category', filters.categoryCode);
@@ -121,13 +125,49 @@ function HomePageContent() {
     if (filters.sortPrice) params.set('sortPrice', filters.sortPrice);
     const queryString = params.toString();
     router.push(queryString ? `/?${queryString}` : '/', { scroll: false });
-  };
+  }, [router]);
 
-  const scrollToProducts = () => {
+  const scrollToProducts = useCallback(() => {
     document.getElementById('product-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  }, []);
+
+  const cancelPendingPriceFilter = useCallback(() => {
+    if (priceDebounceTimer.current) {
+      clearTimeout(priceDebounceTimer.current);
+      priceDebounceTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => cancelPendingPriceFilter();
+  }, [cancelPendingPriceFilter]);
+
+  const handleMaxPriceChange = useCallback((newMaxPrice: string) => {
+    setMaxPrice(newMaxPrice);
+    cancelPendingPriceFilter();
+
+    priceDebounceTimer.current = setTimeout(() => {
+      priceDebounceTimer.current = null;
+      const filters = {
+        keyword,
+        categoryCode: category,
+        maxPrice: newMaxPrice,
+        sortPrice,
+      };
+      updateBrowserFilters(filters);
+      void fetchCatalog(filters);
+    }, 300);
+  }, [
+    cancelPendingPriceFilter,
+    category,
+    fetchCatalog,
+    keyword,
+    sortPrice,
+    updateBrowserFilters,
+  ]);
 
   const handleHeaderSearch = (newKeyword: string) => {
+    cancelPendingPriceFilter();
     setKeyword(newKeyword);
     const filters = { keyword: newKeyword, categoryCode: category, maxPrice, sortPrice };
     updateBrowserFilters(filters);
@@ -135,14 +175,8 @@ function HomePageContent() {
     setTimeout(scrollToProducts, 50);
   };
 
-  const handleSidebarFilter = () => {
-    const filters = { keyword, categoryCode: category, maxPrice, sortPrice };
-    updateBrowserFilters(filters);
-    void fetchCatalog(filters);
-    scrollToProducts();
-  };
-
   const handleCategoryChange = (categoryCode: string) => {
+    cancelPendingPriceFilter();
     setCategory(categoryCode);
     const filters = { keyword, categoryCode, maxPrice, sortPrice };
     updateBrowserFilters(filters);
@@ -151,6 +185,7 @@ function HomePageContent() {
   };
 
   const handleClearFilters = () => {
+    cancelPendingPriceFilter();
     setKeyword('');
     setCategory('');
     setMaxPrice('');
@@ -197,15 +232,8 @@ function HomePageContent() {
             totalCampaigns={totalCampaigns}
             onCategoryChange={handleCategoryChange}
             maxPrice={maxPrice}
-            setMaxPrice={setMaxPrice}
-            onFilter={handleSidebarFilter}
+            onMaxPriceChange={handleMaxPriceChange}
             onClear={handleClearFilters}
-            onQuickPrice={(newPrice) => {
-              const filters = { keyword, categoryCode: category, maxPrice: newPrice, sortPrice };
-              updateBrowserFilters(filters);
-              void fetchCatalog(filters);
-              scrollToProducts();
-            }}
           />
         </div>
 
@@ -226,6 +254,7 @@ function HomePageContent() {
             <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 self-start sm:self-auto">
               <button
                 onClick={() => {
+                  cancelPendingPriceFilter();
                   const val: CatalogFilters['sortPrice'] = sortPrice === 'asc' ? '' : 'asc';
                   setSortPrice(val);
                   const filters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
@@ -243,6 +272,7 @@ function HomePageContent() {
               </button>
               <button
                 onClick={() => {
+                  cancelPendingPriceFilter();
                   const val: CatalogFilters['sortPrice'] = sortPrice === 'desc' ? '' : 'desc';
                   setSortPrice(val);
                   const filters = { keyword, categoryCode: category, maxPrice, sortPrice: val };
@@ -269,12 +299,16 @@ function HomePageContent() {
           )}
 
           {loading ? (
-            <div className="py-24 text-center">
-              <div className="inline-block relative w-12 h-12">
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-primary/20 rounded-full"></div>
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-primary rounded-full border-t-transparent animate-spin"></div>
-              </div>
-              <p className="mt-4 text-sm font-medium text-slate-500">Đang tìm kiếm deal hot...</p>
+            <div
+              className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              role="status"
+              aria-busy="true"
+              aria-label="Đang tải danh sách voucher"
+            >
+              <span className="sr-only">Đang tải danh sách voucher...</span>
+              {Array.from({ length: PRODUCT_SKELETON_COUNT }, (_, index) => (
+                <ProductCardSkeleton key={index} />
+              ))}
             </div>
           ) : campaigns.length === 0 ? (
             <div className="text-center py-24 bg-white rounded-2xl border border-slate-100 shadow-sm">

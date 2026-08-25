@@ -22,6 +22,7 @@ interface Partner {
 }
 
 interface VoucherCampaign {
+  campaignId?: string;
   title: string;
   originalPrice: number;
   salePrice: number | null;
@@ -75,6 +76,10 @@ function CheckoutPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderIdFromQuery = searchParams.get('orderId');
+  const campaignIdFromQuery = searchParams.get('campaignId');
+  const quantityFromQuery = Number(searchParams.get('quantity') || '1');
+  const checkoutQuery = searchParams.toString();
+  const isDirectCheckout = Boolean(campaignIdFromQuery && !orderIdFromQuery);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +110,32 @@ function CheckoutPageContent() {
       setLoading(false);
     }
   }, [router]);
+
+  const fetchDirectItem = useCallback(async (campaignId: string, quantity: number) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
+        setCartItems([]);
+        setErrorMsg('Số lượng mua ngay phải từ 1 đến 10 voucher.');
+        return;
+      }
+
+      const campaign = await apiRequest<VoucherCampaign>(`/vouchers/${campaignId}`);
+      setCartItems([
+        {
+          cartItemId: `direct-${campaignId}`,
+          quantity,
+          campaign,
+        },
+      ]);
+    } catch (error: unknown) {
+      setCartItems([]);
+      setErrorMsg(getErrorMessage(error, 'Không thể tải voucher cần thanh toán.'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const fetchExistingOrder = useCallback(async (orderId: string) => {
     setLoading(true);
@@ -153,11 +184,15 @@ function CheckoutPageContent() {
   useEffect(() => {
     if (!authLoading) {
       if (!user) {
-        const redirectTarget = orderIdFromQuery ? `/checkout?orderId=${orderIdFromQuery}` : '/checkout';
+        const redirectTarget = checkoutQuery ? `/checkout?${checkoutQuery}` : '/checkout';
         router.push(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
       } else if (orderIdFromQuery) {
         queueMicrotask(() => {
           void fetchExistingOrder(orderIdFromQuery);
+        });
+      } else if (campaignIdFromQuery) {
+        queueMicrotask(() => {
+          void fetchDirectItem(campaignIdFromQuery, quantityFromQuery);
         });
       } else {
         queueMicrotask(() => {
@@ -165,7 +200,18 @@ function CheckoutPageContent() {
         });
       }
     }
-  }, [user, authLoading, orderIdFromQuery, router, fetchCart, fetchExistingOrder]);
+  }, [
+    user,
+    authLoading,
+    orderIdFromQuery,
+    campaignIdFromQuery,
+    quantityFromQuery,
+    checkoutQuery,
+    router,
+    fetchCart,
+    fetchDirectItem,
+    fetchExistingOrder,
+  ]);
 
   // Bộ đếm ngược giữ chỗ 15 phút
   useEffect(() => {
@@ -193,6 +239,14 @@ function CheckoutPageContent() {
         body: JSON.stringify({
           recipientNote,
           paymentProvider,
+          ...(isDirectCheckout && campaignIdFromQuery
+            ? {
+                directItem: {
+                  campaignId: campaignIdFromQuery,
+                  quantity: quantityFromQuery,
+                },
+              }
+            : {}),
         }),
       });
       setCreatedOrder(order);
@@ -322,14 +376,21 @@ function CheckoutPageContent() {
         <div className="flex items-center gap-2 text-xs text-muted">
           <Link href="/" className="hover:text-primary font-semibold transition-colors">Trang chủ</Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <Link href="/cart" className="hover:text-primary font-semibold transition-colors">Giỏ hàng</Link>
+          <Link
+            href={isDirectCheckout && campaignIdFromQuery ? `/voucher/${campaignIdFromQuery}` : '/cart'}
+            className="hover:text-primary font-semibold transition-colors"
+          >
+            {isDirectCheckout ? 'Chi tiết voucher' : 'Giỏ hàng'}
+          </Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="font-semibold text-foreground">Thanh toán</span>
         </div>
 
         <div className="flex items-center gap-2 pb-3 border-b border-border/60">
           <CreditCard className="h-6 w-6 text-primary" />
-          <h1 className="text-xl sm:text-2xl font-extrabold text-foreground">Thanh toán Đơn hàng</h1>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-foreground">
+            {isDirectCheckout ? 'Thanh toán Mua ngay' : 'Thanh toán Đơn hàng'}
+          </h1>
         </div>
 
         {errorMsg && (

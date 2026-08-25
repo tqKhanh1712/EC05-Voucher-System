@@ -1,8 +1,11 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MapPin, Store, ArrowRight, Flame } from 'lucide-react';
+import { ArrowRight, Flame, LoaderCircle, MapPin, Plus, Store } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useCart } from '../context/CartContext';
 import {
   discountPercentage,
   hasDiscount,
@@ -32,6 +35,7 @@ export interface VoucherCardProps {
 }
 
 export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps) {
+  const { addToCart, addingCampaignIds } = useCart();
   const thumbnailUrl = c.thumbnailUrl ?? c.thumbnail_url;
   const brandName = c.primaryBrand?.displayName ?? c.partner.companyName;
   const categoryName = c.primaryCategory?.nameVi ?? c.category ?? 'Khác';
@@ -40,6 +44,7 @@ export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps
   const sellingPrice = resolveSellingPrice(c);
   const remaining = Math.max(c.capacity - c.soldQuantity, 0);
   const isSoldOut = remaining === 0;
+  const isAdding = addingCampaignIds.has(c.campaignId);
   const soldPercent = Math.min(Math.round((c.soldQuantity / c.capacity) * 100), 100);
   
   // Choose a gradient based on category or index for visual variety
@@ -58,8 +63,15 @@ export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
       whileHover={{ y: -4 }}
-      className="group flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all duration-300 hover:shadow-xl"
     >
+      <Link
+        href={`/voucher/${c.campaignId}`}
+        aria-label={`Xem chi tiết ${c.title}`}
+        className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+      >
+        <span className="sr-only">Xem chi tiết {c.title}</span>
+      </Link>
       {/* Top Image / Gradient Area */}
       <div className={`relative h-40 w-full p-4 flex flex-col justify-between overflow-hidden ${!thumbnailUrl ? `bg-gradient-to-br ${bgGradient}` : 'bg-slate-100'}`}>
         {/* Background Image / Pattern */}
@@ -92,7 +104,7 @@ export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps
       </div>
 
       {/* Content Area */}
-      <div className="p-4 flex flex-col flex-grow">
+      <div className="flex flex-1 flex-col p-4">
         <h3 className="text-sm font-bold text-slate-800 line-clamp-2 min-h-[40px] group-hover:text-primary transition-colors" title={c.title}>
           {c.title}
         </h3>
@@ -144,24 +156,42 @@ export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps
           </div>
         </div>
 
-        {/* Action Button */}
-        {isSoldOut ? (
-          <div
-            role="status"
-            aria-label={`${c.title} đã bán hết`}
-            className="mt-4 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 py-2.5 font-bold text-slate-500"
-          >
-            Đã bán hết
-          </div>
-        ) : (
-          <Link
-            href={`/voucher/${c.campaignId}`}
-            className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-primary/5 hover:bg-primary text-primary hover:text-white font-bold rounded-xl transition-all duration-300 border border-primary/10 hover:border-primary"
-          >
-            Mua Ngay
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        )}
+        {/* Navigation cue and quick add action */}
+        <div className="mt-auto pt-4">
+          {isSoldOut ? (
+            <div
+              role="status"
+              aria-label={`${c.title} đã bán hết`}
+              className="flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 font-bold text-slate-500"
+            >
+              Đã bán hết
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-primary/10 bg-primary/5 px-4 py-2.5 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-white"
+              >
+                Xem chi tiết
+                <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void addToCart(c.campaignId, 1)}
+                disabled={isAdding}
+                aria-label={`Thêm ${c.title} vào giỏ hàng`}
+                title="Thêm vào giỏ hàng"
+                className="relative z-20 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-md shadow-primary/20 transition hover:bg-primary-hover active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
+              >
+                {isAdding ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </motion.div>
   );

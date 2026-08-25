@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { apiRequest } from '../lib/api';
 import { hasDiscount, resolveSellingPrice } from '../lib/pricing';
 import { 
@@ -37,10 +38,6 @@ interface HeaderProps {
   initialKeyword?: string;
 }
 
-interface CartItem {
-  quantity?: number;
-}
-
 interface VoucherSuggestion {
   title: string;
   originalPrice: number;
@@ -51,27 +48,19 @@ interface VoucherSuggestion {
 
 export default function Header({ onSearch, initialKeyword = '' }: HeaderProps) {
   const { user, logout } = useAuth();
+  const { cartItemCount, refreshCartCount } = useCart();
   const router = useRouter();
   const [keyword, setKeyword] = useState(initialKeyword);
   const [suggestions, setSuggestions] = useState<VoucherSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  
-  const [cartItemCount, setCartItemCount] = useState(0);
 
   useEffect(() => {
     if (user?.role === 'CUSTOMER') {
-      apiRequest<CartItem[]>('/cart')
-        .then((data) => {
-          const count = Array.isArray(data) ? data.reduce((acc, item) => acc + (item.quantity || 1), 0) : 0;
-          setCartItemCount(count);
-        })
-        .catch(() => {
-          setCartItemCount(0);
-        });
+      void refreshCartCount();
     }
-  }, [user]);
+  }, [refreshCartCount, user?.role]);
 
   // Fetch suggestions with debounce
   useEffect(() => {
@@ -300,6 +289,16 @@ export default function Header({ onSearch, initialKeyword = '' }: HeaderProps) {
                     <Link href="/profile" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary rounded-lg transition-colors">
                       <UserIcon className="h-4 w-4" /> Thông tin hồ sơ
                     </Link>
+                    {user.role === 'CUSTOMER' && (
+                      <>
+                        <Link href="/customer/vouchers" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary rounded-lg transition-colors">
+                          <WalletCards className="h-4 w-4" /> Voucher sở hữu
+                        </Link>
+                        <Link href="/customer/orders" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary rounded-lg transition-colors">
+                          <FileText className="h-4 w-4" /> Đơn hàng
+                        </Link>
+                      </>
+                    )}
                     <div className="h-px bg-slate-100 my-1"></div>
                     <button 
                       onClick={logout}
@@ -448,7 +447,7 @@ export default function Header({ onSearch, initialKeyword = '' }: HeaderProps) {
                     </Link>
                     <Link href="/customer/vouchers" onClick={closeMobileNavigation} className="flex min-h-11 items-center gap-3 rounded-ui-md px-3 py-2.5 text-sm font-bold text-foreground hover:bg-surface-subtle">
                       <WalletCards className="h-5 w-5 text-brand" aria-hidden="true" />
-                      Ví voucher
+                      Voucher sở hữu
                     </Link>
                   </>
                 )}

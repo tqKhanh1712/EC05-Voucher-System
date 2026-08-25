@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Tag, X, Filter, ChevronDown } from 'lucide-react';
+import { X, Filter, ChevronDown } from 'lucide-react';
 
 interface CategoryFilterOption {
   code: string;
@@ -16,11 +16,15 @@ export interface FilterSidebarProps {
   totalCampaigns: number;
   onCategoryChange: (value: string) => void;
   maxPrice: string;
-  setMaxPrice: (val: string) => void;
-  onFilter: () => void;
+  onMaxPriceChange: (value: string) => void;
   onClear: () => void;
-  onQuickPrice?: (val: string) => void;
 }
+
+const QUICK_PRICES = [
+  { label: '< 100K', value: '100.000' },
+  { label: '< 200K', value: '200.000' },
+  { label: '< 500K', value: '500.000' },
+];
 
 export default function FilterSidebar({
   category,
@@ -28,25 +32,17 @@ export default function FilterSidebar({
   totalCampaigns,
   onCategoryChange,
   maxPrice,
-  setMaxPrice,
-  onFilter,
+  onMaxPriceChange,
   onClear,
-  onQuickPrice
 }: FilterSidebarProps) {
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value.replace(/\D/g, '');
     if (!rawValue) {
-      setMaxPrice('');
+      onMaxPriceChange('');
       return;
     }
-    setMaxPrice(Number(rawValue).toLocaleString('vi-VN'));
+    onMaxPriceChange(Number(rawValue).toLocaleString('vi-VN'));
   };
-
-  const quickPrices = [
-    { label: '< 100K', value: '100.000' },
-    { label: '< 200K', value: '200.000' },
-    { label: '< 500K', value: '500.000' },
-  ];
 
   const [expandedCategories, setExpandedCategories] = React.useState<Record<string, boolean>>({});
 
@@ -63,15 +59,14 @@ export default function FilterSidebar({
       <button
         key={option.code || 'all'}
         onClick={() => onCategoryChange(option.code)}
-        className={`flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl text-left transition-all group ${
+        className={`group flex w-full items-center justify-between border-l-4 px-3 py-2.5 text-left text-xs transition-colors ${
           nested ? 'pl-8' : ''
         } ${
           isActive
-            ? 'bg-primary text-white shadow-md'
-            : nested
-              ? 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+            ? 'rounded-r-xl border-red-600 bg-gray-100 font-semibold text-red-600'
+            : 'rounded-r-xl border-transparent bg-white font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
         }`}
+        aria-pressed={isActive}
       >
         <span className="flex items-center gap-2">
           {!nested && option.code !== '' && (
@@ -80,7 +75,7 @@ export default function FilterSidebar({
                 if (hasChildren) toggleCategory(option.code, e);
               }}
               className={`p-1 rounded-md transition-colors ${
-                hasChildren ? (isActive ? 'hover:bg-white/20 cursor-pointer' : 'hover:bg-slate-200 cursor-pointer') : 'opacity-30'
+                hasChildren ? 'cursor-pointer hover:bg-slate-200' : 'opacity-30'
               }`}
             >
               <ChevronDown
@@ -91,10 +86,9 @@ export default function FilterSidebar({
           <span className={!nested && option.code === '' ? 'pl-5' : ''}>{option.name}</span>
         </span>
         <span className="flex items-center gap-2">
-          <span className={isActive ? 'text-white/80' : 'text-slate-400'}>
+          <span className={isActive ? 'text-red-500' : 'text-gray-400'}>
             {option.campaignCount}
           </span>
-          {isActive && <Tag className="h-3.5 w-3.5 text-white/90" />}
         </span>
       </button>
     );
@@ -114,17 +108,18 @@ export default function FilterSidebar({
         <label className="block text-xs font-bold text-slate-700">Khoảng giá</label>
         
         <div className="flex flex-wrap gap-2">
-          {quickPrices.map((qp) => (
+          {QUICK_PRICES.map((qp) => (
             <button
+              type="button"
               key={qp.value}
               onClick={() => {
-                setMaxPrice(qp.value);
-                if (onQuickPrice) onQuickPrice(qp.value);
+                onMaxPriceChange(maxPrice === qp.value ? '' : qp.value);
               }}
-              className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border transition-all ${
+              aria-pressed={maxPrice === qp.value}
+              className={`inline-flex min-h-10 items-center justify-center rounded-full border px-3 py-2 text-[11px] font-bold transition-colors ${
                 maxPrice === qp.value
-                  ? 'bg-primary text-white border-primary shadow-sm'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-primary hover:text-primary'
+                  ? 'border-red-200 bg-red-50 text-red-600'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:bg-slate-50 hover:text-red-600'
               }`}
             >
               {qp.label}
@@ -135,21 +130,14 @@ export default function FilterSidebar({
         <div className="flex items-center gap-2">
           <input
             type="text"
+            inputMode="numeric"
             value={maxPrice}
             onChange={handlePriceChange}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onFilter();
-            }}
             placeholder="Tối đa (đ)"
             className="w-full bg-slate-50 border border-slate-200 focus:border-primary/50 focus:bg-white rounded-xl px-3 py-2 text-sm outline-none transition-all"
+            aria-label="Giá tối đa"
           />
         </div>
-        <button
-          onClick={onFilter}
-          className="w-full py-2 bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold rounded-xl transition-all border border-transparent"
-        >
-          Áp dụng
-        </button>
       </div>
 
       {/* Danh mục */}

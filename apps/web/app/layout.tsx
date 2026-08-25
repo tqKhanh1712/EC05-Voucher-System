@@ -3,6 +3,8 @@ import { Manrope } from "next/font/google";
 import "../styles/tokens.css";
 import "./globals.css";
 import { AuthProvider } from "../context/AuthContext";
+import { CartProvider } from "../context/CartContext";
+import { ToastProvider } from "../context/ToastContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const manrope = Manrope({
@@ -24,7 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <TooltipProvider delay={350}>
           <AuthProvider>
-            {children}
+            <ToastProvider>
+              <CartProvider>{children}</CartProvider>
+            </ToastProvider>
           </AuthProvider>
         </TooltipProvider>
       </body>

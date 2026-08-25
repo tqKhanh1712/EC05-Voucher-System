@@ -83,4 +83,61 @@ describe('OrdersService checkout', () => {
     expect(orderData.totalAmount.toString()).toBe('100');
     expect(itemData.unitPrice.toString()).toBe('50');
   });
+
+  it('checks out only the direct item and preserves the existing cart', async () => {
+    const { campaign, prisma, tx } = createTransaction();
+    const service = new OrdersService(prisma as any);
+
+    await service.checkout('00000000-0000-4000-8000-000000000001', {
+      paymentProvider: PaymentProviderType.STRIPE,
+      directItem: {
+        campaignId: campaign.campaignId,
+        quantity: 3,
+      },
+    });
+
+    expect(tx.cartItem.findMany).not.toHaveBeenCalled();
+    expect(tx.cartItem.deleteMany).not.toHaveBeenCalled();
+    expect(tx.orderItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        campaignId: campaign.campaignId,
+        quantity: 3,
+      }),
+    });
+    expect(tx.order.create.mock.calls[0][0].data.totalAmount.toString()).toBe(
+      '59.97',
+    );
+  });
+
+  it('clears the cart after the regular cart checkout', async () => {
+    const { prisma, tx } = createTransaction();
+    const service = new OrdersService(prisma as any);
+
+    await service.checkout('00000000-0000-4000-8000-000000000001', {
+      paymentProvider: PaymentProviderType.STRIPE,
+    });
+
+    expect(tx.cartItem.deleteMany).toHaveBeenCalledWith({
+      where: { customerId: '00000000-0000-4000-8000-000000000001' },
+    });
+  });
+
+  it('rejects an invalid direct checkout quantity before reserving stock', async () => {
+    const { campaign, prisma, tx } = createTransaction();
+    const service = new OrdersService(prisma as any);
+
+    await expect(
+      service.checkout('00000000-0000-4000-8000-000000000001', {
+        paymentProvider: PaymentProviderType.STRIPE,
+        directItem: {
+          campaignId: campaign.campaignId,
+          quantity: 11,
+        },
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(tx.voucherCampaign.update).not.toHaveBeenCalled();
+    expect(tx.order.create).not.toHaveBeenCalled();
+    expect(tx.cartItem.deleteMany).not.toHaveBeenCalled();
+  });
 });

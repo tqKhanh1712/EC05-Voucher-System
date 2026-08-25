@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiRequest } from '../../../../lib/api';
 import { getErrorMessage } from '../../../../lib/errors';
@@ -10,6 +10,9 @@ import {
   resolveSellingPrice,
 } from '../../../../lib/pricing';
 import { useAuth } from '../../../../context/AuthContext';
+import { useCart } from '../../../../context/CartContext';
+import { useToast } from '../../../../context/ToastContext';
+import ProductDescription from '../../../../components/ProductDescription';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -19,6 +22,8 @@ import {
   Clock, 
   Store, 
   ShoppingCart, 
+  CreditCard,
+  LoaderCircle,
   AlertCircle, 
   CheckCircle,
   Ticket,
@@ -101,14 +106,16 @@ interface ReviewsResponse {
 export default function VoucherDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { addToCart, addingCampaignIds } = useCart();
+  const { showToast } = useToast();
   const campaignId = params.id as string;
 
   const [campaign, setCampaign] = useState<VoucherCampaign | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
-  const [demoMessage, setDemoMessage] = useState<string | null>(null);
+  const [isBuyingNow, startBuyNowTransition] = useTransition();
 
   // States cho module Đánh giá & Phản hồi (Commit 24)
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -170,29 +177,31 @@ export default function VoucherDetailPage() {
     }
   };
 
-  const handlePurchaseClick = async () => {
+  const handleAddToCart = async () => {
+    await addToCart(campaignId, purchaseQty);
+  };
+
+  const handleBuyNow = () => {
+    if (authLoading) return;
+
+    const checkoutTarget = `/checkout?campaignId=${encodeURIComponent(campaignId)}&quantity=${purchaseQty}`;
     if (!user) {
-      // Điều hướng về trang login nếu chưa đăng nhập
-      router.push('/login?redirect=' + encodeURIComponent(window.location.pathname));
+      router.push(`/login?redirect=${encodeURIComponent(checkoutTarget)}`);
       return;
     }
 
-    setErrorMsg(null);
-    try {
-      await apiRequest<void>('/cart/items', {
-        method: 'POST',
-        body: JSON.stringify({
-          campaignId,
-          quantity: purchaseQty,
-        }),
+    if (user.role !== 'CUSTOMER') {
+      showToast({
+        title: 'Tài khoản không phù hợp',
+        description: 'Vui lòng đăng nhập bằng tài khoản khách hàng để mua voucher.',
+        variant: 'error',
       });
-      setDemoMessage(`Đã thêm thành công ${purchaseQty} voucher vào giỏ hàng! Đang chuyển hướng...`);
-      setTimeout(() => {
-        router.push('/cart');
-      }, 1200);
-    } catch (error: unknown) {
-      setErrorMsg(getErrorMessage(error, 'Không thể thêm voucher vào giỏ hàng.'));
+      return;
     }
+
+    startBuyNowTransition(() => {
+      router.push(checkoutTarget);
+    });
   };
 
   if (loading) {
@@ -221,6 +230,7 @@ export default function VoucherDetailPage() {
   const discounted = hasDiscount(campaign);
   const discountPct = discountPercentage(campaign);
   const sellingPrice = resolveSellingPrice(campaign);
+  const isAddingToCart = addingCampaignIds.has(campaignId);
 
   return (
     <div className="min-h-screen bg-background font-sans py-8 px-4 sm:px-6 lg:px-8">
@@ -232,14 +242,6 @@ export default function VoucherDetailPage() {
           <ChevronRight className="h-3.5 w-3.5" />
           <span className="font-semibold text-foreground max-w-xs truncate">{campaign.title}</span>
         </div>
-
-        {/* THÔNG BÁO DEMO MUA HÀNG */}
-        {demoMessage && (
-          <div className="flex items-center gap-3 rounded-lg bg-green-500/10 p-4 border border-green-500/20 text-green-800 text-sm leading-relaxed animate-in slide-in-from-top-2">
-            <CheckCircle className="h-5 w-5 shrink-0 text-green-600" />
-            <p className="font-semibold">{demoMessage}</p>
-          </div>
-        )}
 
         {/* CONTAINER CHÍNH */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -285,13 +287,7 @@ export default function VoucherDetailPage() {
                 </div>
               </div>
 
-              {/* Nội dung gốc từ catalog */}
-              <div className="border-t border-border pt-4 space-y-3">
-                <h3 className="text-sm font-bold text-foreground">Thông tin sản phẩm</h3>
-                <div className="text-xs text-muted leading-relaxed whitespace-pre-line bg-slate-50 border border-slate-100 p-4 rounded-xl">
-                  {campaign.description || 'Chưa có thông tin chi tiết cho sản phẩm này.'}
-                </div>
-              </div>
+              <ProductDescription description={campaign.description} />
 
               <div className="border-t border-border pt-4 space-y-3">
                 <h3 className="text-sm font-bold text-foreground">Chú ý & Điều kiện áp dụng</h3>
@@ -487,7 +483,7 @@ export default function VoucherDetailPage() {
               </div>
 
               {/* Tình trạng kho hàng */}
-              <div className="border-t border-border/60 pt-4 text-xs space-y-2 text-muted">
+              <div className="border-t border-border/60 pt-4 text-xs space-y-2 text-slate-700">
                 <div className="flex items-center justify-between">
                   <span>Tình trạng:</span>
                   <span className={`font-bold ${isSoldOut ? 'text-red-600' : 'text-green-600'}`}>
@@ -553,16 +549,35 @@ export default function VoucherDetailPage() {
                 </div>
               )}
 
-              {/* Nút Đặt mua */}
-              <button
-                type="button"
-                onClick={handlePurchaseClick}
-                disabled={isSoldOut}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary-hover text-white py-3 text-sm font-bold disabled:bg-slate-300 disabled:text-slate-500 transition-colors shadow shadow-primary/10"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                {isSoldOut ? 'Đã hết hàng' : user ? 'Mua Voucher ngay' : 'Đăng nhập để mua'}
-              </button>
+              {/* Thêm vào giỏ hoặc mua ngay */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleAddToCart()}
+                  disabled={isSoldOut || isAddingToCart || authLoading}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary bg-white px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  {isAddingToCart ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {isSoldOut ? 'Hết hàng' : 'Thêm vào giỏ'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={isSoldOut || isBuyingNow || authLoading}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-sm font-bold text-white shadow shadow-primary/10 transition hover:bg-primary-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  {isBuyingNow ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {isSoldOut ? 'Hết hàng' : 'Mua ngay'}
+                </button>
+              </div>
 
             </div>
           </div>

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Mail, Lock, Ticket, ArrowRight, AlertCircle, Info, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { getErrorMessage } from '../../../lib/errors';
+import { getSafeInternalRedirect } from '../../../lib/navigation';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Vui lòng nhập Email hoặc Số điện thoại.'),
@@ -23,6 +24,7 @@ function LoginForm() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const showPartnerInfo = searchParams.get('registered') === 'partner';
+  const redirectTo = getSafeInternalRedirect(searchParams.get('redirect'));
 
   const {
     register: formRegister,
@@ -42,7 +44,7 @@ function LoginForm() {
     };
 
     try {
-      await login(payload);
+      await login(payload, redirectTo);
     } catch (error: unknown) {
       setErrorMsg(getErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'));
     }

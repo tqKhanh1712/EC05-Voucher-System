@@ -20,7 +20,7 @@ export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Tạo đơn hàng từ giỏ hàng hiện tại của khách hàng.
+   * Tạo đơn hàng từ giỏ hiện tại hoặc một voucher được mua trực tiếp.
    * Sử dụng khóa dòng SELECT FOR UPDATE (Concurrency Row Locking) để chống bán lố (Oversold).
    * @param customerId ID khách hàng thực hiện thanh toán
    * @param dto DTO chứa thông tin cổng thanh toán và ghi chú
@@ -28,21 +28,34 @@ export class OrdersService {
    */
   async checkout(customerId: string, dto: CheckoutDto) {
     return this.prisma.$transaction(async (tx) => {
-      // Serialize checkout attempts for the same customer. This prevents two
-      // concurrent requests from creating orders from the same cart.
+      // Serialize checkout attempts for the same customer to prevent duplicate
+      // cart or direct orders from racing each other.
       await tx.$queryRaw`
         SELECT user_id FROM "Users"
         WHERE user_id = ${customerId}::uuid
         FOR UPDATE
       `;
 
-      const cartItems = await tx.cartItem.findMany({
-        where: { customerId },
-        orderBy: { campaignId: 'asc' },
-      });
+      const isDirectCheckout = Boolean(dto.directItem);
+      const checkoutItems = dto.directItem
+        ? [dto.directItem]
+        : await tx.cartItem.findMany({
+            where: { customerId },
+            orderBy: { campaignId: 'asc' },
+          });
 
-      if (cartItems.length === 0) {
+      if (checkoutItems.length === 0) {
         throw new BadRequestException('Giỏ hàng của bạn đang trống.');
+      }
+
+      for (const item of checkoutItems) {
+        if (
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1 ||
+          item.quantity > 10
+        ) {
+          throw new BadRequestException('Số lượng voucher phải từ 1 đến 10.');
+        }
       }
 
       let totalAmount = new Prisma.Decimal(0);
@@ -50,7 +63,7 @@ export class OrdersService {
       const now = new Date();
 
       // Lock campaigns in a stable order to avoid deadlocks between checkouts.
-      for (const item of cartItems) {
+      for (const item of checkoutItems) {
         await tx.$queryRaw`
           SELECT campaign_id FROM "Voucher_Campaigns"
           WHERE campaign_id = ${item.campaignId}::uuid
@@ -91,7 +104,7 @@ export class OrdersService {
         totalAmount = totalAmount.add(unitPrice.mul(item.quantity));
       }
 
-      for (const item of cartItems) {
+      for (const item of checkoutItems) {
         await tx.voucherCampaign.update({
           where: { campaignId: item.campaignId },
           data: {
@@ -116,7 +129,7 @@ export class OrdersService {
         },
       });
 
-      for (const item of cartItems) {
+      for (const item of checkoutItems) {
         const unitPrice = currentUnitPrices.get(item.campaignId);
         if (!unitPrice) {
           throw new BadRequestException(
@@ -144,9 +157,11 @@ export class OrdersService {
         });
       }
 
-      await tx.cartItem.deleteMany({
-        where: { customerId },
-      });
+      if (!isDirectCheckout) {
+        await tx.cartItem.deleteMany({
+          where: { customerId },
+        });
+      }
 
       return order;
     });

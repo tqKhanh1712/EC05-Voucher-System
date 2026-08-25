@@ -19,6 +19,7 @@ import {
   logoutSession,
   refreshSession,
 } from "../lib/api";
+import { getSafeInternalRedirect } from "../lib/navigation";
 
 interface LoginData {
   email?: string;
@@ -37,7 +38,7 @@ interface RegisterData extends LoginData {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (loginData: LoginData) => Promise<void>;
+  login: (loginData: LoginData, redirectTo?: string) => Promise<void>;
   register: (registerData: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<AuthUser | null>>;
@@ -190,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [logout, session, user]);
 
-  const login = async (loginData: LoginData) => {
+  const login = async (loginData: LoginData, redirectTo?: string) => {
     setLoading(true);
     try {
       const auth = await apiRequest<AuthResponse>("/auth/login", {
@@ -200,7 +201,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       acceptAuthSession(auth);
       applySession(auth);
 
-      if (auth.user.role === "ADMIN") {
+      const customerRedirect =
+        auth.user.role === "CUSTOMER"
+          ? getSafeInternalRedirect(redirectTo)
+          : undefined;
+
+      if (customerRedirect) {
+        router.push(customerRedirect);
+      } else if (auth.user.role === "ADMIN") {
         router.push("/admin");
       } else if (auth.user.role === "PARTNER") {
         router.push("/partner");
