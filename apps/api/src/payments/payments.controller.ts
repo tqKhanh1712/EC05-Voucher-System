@@ -79,6 +79,12 @@ export class PaymentsController {
         (payment as any).order.orderCode,
       );
       paymentUrl = res.paymentUrl;
+      if (res.providerOrderId) {
+        await this.paymentsService.updateProviderOrderId(
+          payment.paymentId,
+          res.providerOrderId,
+        );
+      }
     }
 
     return {

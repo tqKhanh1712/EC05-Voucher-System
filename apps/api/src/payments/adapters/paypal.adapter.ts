@@ -9,6 +9,9 @@ export class PaypalAdapter implements PaymentProvider {
   private readonly clientId = process.env.PAYPAL_CLIENT_ID || 'mock_paypal_client_id_123';
   private readonly clientSecret = process.env.PAYPAL_CLIENT_SECRET || 'mock_paypal_client_secret_456';
   private readonly apiUrl = process.env.PAYPAL_API_URL || 'https://api-m.sandbox.paypal.com';
+  private readonly frontendUrl = (
+    process.env.FRONTEND_URL || 'http://localhost:3000'
+  ).replace(/\/$/, '');
 
   /**
    * Tạo PayPal Order và lấy Link phê duyệt (Approve Link).
@@ -39,8 +42,8 @@ export class PaypalAdapter implements PaymentProvider {
             },
           ],
           application_context: {
-            return_url: `http://localhost:3000/payments/return/paypal?paymentId=${payment.paymentId}`,
-            cancel_url: `http://localhost:3000/cart`,
+            return_url: `${this.frontendUrl}/payments/return/paypal?paymentId=${payment.paymentId}`,
+            cancel_url: `${this.frontendUrl}/cart`,
           },
         }),
       });
