@@ -21,7 +21,9 @@ import { StripeAdapter } from './adapters/stripe.adapter';
 import { PaypalAdapter } from './adapters/paypal.adapter';
 
 export class CreatePaymentAttemptDto {
-  @IsEnum(PaymentProviderType, { message: 'Cổng thanh toán không hợp lệ (STRIPE, PAYPAL, VNPAY).' })
+  @IsEnum(PaymentProviderType, {
+    message: 'Cổng thanh toán không hợp lệ (STRIPE, PAYPAL, VNPAY).',
+  })
   provider: PaymentProviderType;
 }
 
@@ -60,13 +62,22 @@ export class PaymentsController {
     let paymentUrl = `/payments/return/mock?paymentId=${payment.paymentId}`;
 
     if (payment.provider === PaymentProviderType.VNPAY) {
-      const res = await this.vnPayAdapter.createPayment(payment, (payment as any).order.orderCode);
+      const res = await this.vnPayAdapter.createPayment(
+        payment,
+        (payment as any).order.orderCode,
+      );
       paymentUrl = res.paymentUrl;
     } else if (payment.provider === PaymentProviderType.STRIPE) {
-      const res = await this.stripeAdapter.createPayment(payment, (payment as any).order.orderCode);
+      const res = await this.stripeAdapter.createPayment(
+        payment,
+        (payment as any).order.orderCode,
+      );
       paymentUrl = res.paymentUrl;
     } else if (payment.provider === PaymentProviderType.PAYPAL) {
-      const res = await this.paypalAdapter.createPayment(payment, (payment as any).order.orderCode);
+      const res = await this.paypalAdapter.createPayment(
+        payment,
+        (payment as any).order.orderCode,
+      );
       paymentUrl = res.paymentUrl;
     }
 
@@ -84,7 +95,10 @@ export class PaymentsController {
   @Get(':paymentId/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER, UserRole.ADMIN)
-  async getPaymentStatus(@Req() req: any, @Param('paymentId') paymentId: string) {
+  async getPaymentStatus(
+    @Req() req: any,
+    @Param('paymentId') paymentId: string,
+  ) {
     const payment = await this.paymentsService.getPaymentDetailsForActor(
       paymentId,
       req.user,
@@ -107,11 +121,16 @@ export class PaymentsController {
   @Roles(UserRole.ADMIN)
   async mockSuccess(@Param('paymentId') paymentId: string) {
     if (process.env.NODE_ENV === 'production') {
-      throw new ForbiddenException('Endpoint mô phỏng bị vô hiệu hóa trong production.');
+      throw new ForbiddenException(
+        'Endpoint mô phỏng bị vô hiệu hóa trong production.',
+      );
     }
 
     const providerTransactionId = `MOCK-TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const order = await this.paymentFinalizationService.finalizePayment(paymentId, providerTransactionId);
+    const order = await this.paymentFinalizationService.finalizePayment(
+      paymentId,
+      providerTransactionId,
+    );
     return {
       message: 'Mô phỏng thanh toán thành công!',
       orderId: order.orderId,
@@ -134,7 +153,10 @@ export class PaymentsController {
       const paymentId = query.vnp_TxnRef;
 
       // 1. Kiểm tra tính hợp lệ của chữ ký checksum
-      if (result.status === 'FAILED' && result.providerTransactionId === 'MOCK-VNP-TX') {
+      if (
+        result.status === 'FAILED' &&
+        result.providerTransactionId === 'MOCK-VNP-TX'
+      ) {
         return { RspCode: '97', Message: 'Invalid signature' };
       }
 
@@ -159,11 +181,18 @@ export class PaymentsController {
 
       // 5. Xác nhận trạng thái thanh toán từ VNPay (ResponseCode 00 = Thành công)
       if (query.vnp_ResponseCode === '00') {
-        await this.paymentFinalizationService.finalizePayment(paymentId, result.providerTransactionId);
+        await this.paymentFinalizationService.finalizePayment(
+          paymentId,
+          result.providerTransactionId,
+        );
         return { RspCode: '00', Message: 'Confirm Success' };
       } else {
         // Cập nhật trạng thái giao dịch thanh toán cục bộ thành FAILED
-        await this.paymentsService.createPaymentAttempt(payment.order.customerId, payment.orderId, PaymentProviderType.VNPAY);
+        await this.paymentsService.createPaymentAttempt(
+          payment.order.customerId,
+          payment.orderId,
+          PaymentProviderType.VNPAY,
+        );
         return { RspCode: '00', Message: 'Confirm Success' };
       }
     } catch (err: any) {
@@ -179,14 +208,22 @@ export class PaymentsController {
   @Post('stripe/webhook')
   async handleStripeWebhook(@Req() req: any) {
     const signature = req.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_mock_secret_key';
+    const webhookSecret =
+      process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_mock_secret_key';
 
     let event: any;
     try {
       // Dùng rawBody buffer được giữ lại ở bootstrap
-      event = this.stripeAdapter.verifyWebhookEvent(req.rawBody, signature, webhookSecret);
+      event = this.stripeAdapter.verifyWebhookEvent(
+        req.rawBody,
+        signature,
+        webhookSecret,
+      );
     } catch (err: any) {
-      return { status: 'error', message: `Webhook signature verification failed: ${err.message}` };
+      return {
+        status: 'error',
+        message: `Webhook signature verification failed: ${err.message}`,
+      };
     }
 
     if (event.type === 'checkout.session.completed') {
@@ -195,7 +232,10 @@ export class PaymentsController {
       const paymentId = session.metadata?.paymentId;
 
       if (result.status === 'SUCCESS' && paymentId) {
-        await this.paymentFinalizationService.finalizePayment(paymentId, result.providerTransactionId);
+        await this.paymentFinalizationService.finalizePayment(
+          paymentId,
+          result.providerTransactionId,
+        );
       }
     }
 
@@ -215,7 +255,10 @@ export class PaymentsController {
     @Body() dto: { paypalOrderId: string; paymentId: string },
   ) {
     try {
-      await this.paymentsService.assertPaymentOwner(dto.paymentId, req.user.userId);
+      await this.paymentsService.assertPaymentPayable(
+        dto.paymentId,
+        req.user.userId,
+      );
       const result = await this.paypalAdapter.captureOrder(dto.paypalOrderId);
 
       if (result.status === 'SUCCESS') {

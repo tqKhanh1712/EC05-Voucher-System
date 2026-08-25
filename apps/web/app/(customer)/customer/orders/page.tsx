@@ -6,12 +6,12 @@ import { getErrorMessage } from '../../../../lib/errors';
 import { useAuth } from '../../../../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  FileText, 
-  CreditCard, 
-  Calendar, 
-  RefreshCw, 
-  ChevronRight, 
+import {
+  FileText,
+  CreditCard,
+  Calendar,
+  RefreshCw,
+  ChevronRight,
   AlertCircle,
   Ticket
 } from 'lucide-react';
@@ -110,7 +110,7 @@ export default function CustomerOrdersPage() {
   return (
     <div className="min-h-screen bg-background font-sans py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        
+
         {/* BREADCRUMB */}
         <div className="flex items-center gap-2 text-xs text-muted">
           <Link href="/" className="hover:text-primary font-semibold transition-colors">Trang chủ</Link>
@@ -156,7 +156,7 @@ export default function CustomerOrdersPage() {
 
               return (
                 <div key={order.orderId} className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
-                  
+
                   {/* Row 1: Code, Status & Date */}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/40 pb-3">
                     <div className="space-y-1">
@@ -171,27 +171,25 @@ export default function CustomerOrdersPage() {
 
                     <div className="flex flex-wrap items-center gap-2">
                       {/* Trạng thái đơn */}
-                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                        order.orderStatus === 'CONFIRMED'
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${order.orderStatus === 'CONFIRMED'
                           ? 'bg-green-100 text-green-700'
                           : order.orderStatus === 'PENDING'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
                         {order.orderStatus === 'CONFIRMED' ? 'Thành công' : order.orderStatus === 'PENDING' ? 'Chờ thanh toán' : 'Đã hủy'}
                       </span>
 
                       {/* Trạng thái thanh toán */}
-                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                        order.paymentStatus === 'PAID'
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${order.paymentStatus === 'PAID'
                           ? 'bg-green-100 text-green-700'
                           : order.paymentStatus === 'REFUNDED'
-                          ? 'bg-slate-100 text-slate-700'
-                          : order.paymentStatus === 'UNPAID'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {order.paymentStatus === 'PAID' ? 'Đã trả tiền' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : order.paymentStatus === 'UNPAID' ? 'Chưa trả tiền' : 'Đang xử lý'}
+                            ? 'bg-slate-100 text-slate-700'
+                            : order.paymentStatus === 'UNPAID'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                        {order.paymentStatus === 'PAID' ? 'Đã trả tiền' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : order.paymentStatus === 'UNPAID' ? 'Chưa thanh toán' : 'Đang xử lý'}
                       </span>
                     </div>
                   </div>

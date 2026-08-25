@@ -14,10 +14,14 @@ import {
   VoucherStatus,
 } from '@prisma/client';
 import { resolveSellingPrice } from '../common/pricing';
+import { OrderExpirationService } from './order-expiration.service';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orderExpirationService: OrderExpirationService,
+  ) {}
 
   /**
    * Tạo đơn hàng từ giỏ hiện tại hoặc một voucher được mua trực tiếp.
@@ -193,6 +197,18 @@ export class OrdersService {
    * @param orderId ID đơn hàng cần xem
    */
   async getOrderDetails(customerId: string, orderId: string) {
+    const ownedOrder = await this.prisma.order.findFirst({
+      where: { orderId, customerId },
+      select: { orderId: true },
+    });
+
+    if (!ownedOrder) {
+      throw new NotFoundException('Không tìm thấy đơn hàng yêu cầu.');
+    }
+
+    // Read-repair: API luôn trả trạng thái đúng ngay cả khi cron chưa tới lượt chạy.
+    await this.orderExpirationService.expireOrderIfDue(orderId);
+
     const order = await this.prisma.order.findFirst({
       where: { orderId, customerId },
       include: {

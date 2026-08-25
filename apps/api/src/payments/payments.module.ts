@@ -6,11 +6,24 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { VnPayAdapter } from './adapters/vnpay.adapter';
 import { StripeAdapter } from './adapters/stripe.adapter';
 import { PaypalAdapter } from './adapters/paypal.adapter';
+import { OrdersModule } from '../orders/orders.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, OrdersModule],
   controllers: [PaymentsController],
-  providers: [PaymentsService, PaymentFinalizationService, VnPayAdapter, StripeAdapter, PaypalAdapter],
-  exports: [PaymentsService, PaymentFinalizationService, VnPayAdapter, StripeAdapter, PaypalAdapter],
+  providers: [
+    PaymentsService,
+    PaymentFinalizationService,
+    VnPayAdapter,
+    StripeAdapter,
+    PaypalAdapter,
+  ],
+  exports: [
+    PaymentsService,
+    PaymentFinalizationService,
+    VnPayAdapter,
+    StripeAdapter,
+    PaypalAdapter,
+  ],
 })
 export class PaymentsModule {}

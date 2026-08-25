@@ -40,7 +40,10 @@ describe('OrdersService checkout', () => {
 
   it('rejects a campaign that is not currently approved for sale', async () => {
     const { prisma, tx } = createTransaction({ status: VoucherStatus.DRAFT });
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await expect(
       service.checkout('00000000-0000-4000-8000-000000000001', {
@@ -52,7 +55,10 @@ describe('OrdersService checkout', () => {
 
   it('uses the locked current price and exact decimal arithmetic', async () => {
     const { campaign, prisma, tx } = createTransaction();
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await service.checkout('00000000-0000-4000-8000-000000000001', {
       paymentProvider: PaymentProviderType.STRIPE,
@@ -72,7 +78,10 @@ describe('OrdersService checkout', () => {
       originalPrice: new Prisma.Decimal('50.00'),
       salePrice: null,
     });
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await service.checkout('00000000-0000-4000-8000-000000000001', {
       paymentProvider: PaymentProviderType.STRIPE,
@@ -86,7 +95,10 @@ describe('OrdersService checkout', () => {
 
   it('checks out only the direct item and preserves the existing cart', async () => {
     const { campaign, prisma, tx } = createTransaction();
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await service.checkout('00000000-0000-4000-8000-000000000001', {
       paymentProvider: PaymentProviderType.STRIPE,
@@ -111,7 +123,10 @@ describe('OrdersService checkout', () => {
 
   it('clears the cart after the regular cart checkout', async () => {
     const { prisma, tx } = createTransaction();
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await service.checkout('00000000-0000-4000-8000-000000000001', {
       paymentProvider: PaymentProviderType.STRIPE,
@@ -124,7 +139,10 @@ describe('OrdersService checkout', () => {
 
   it('rejects an invalid direct checkout quantity before reserving stock', async () => {
     const { campaign, prisma, tx } = createTransaction();
-    const service = new OrdersService(prisma as any);
+    const service = new OrdersService(
+      prisma as any,
+      { expireOrderIfDue: jest.fn() } as any,
+    );
 
     await expect(
       service.checkout('00000000-0000-4000-8000-000000000001', {
@@ -139,5 +157,39 @@ describe('OrdersService checkout', () => {
     expect(tx.voucherCampaign.update).not.toHaveBeenCalled();
     expect(tx.order.create).not.toHaveBeenCalled();
     expect(tx.cartItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('repairs an expired order before returning its details', async () => {
+    const orderId = '00000000-0000-4000-8000-000000000050';
+    const customerId = '00000000-0000-4000-8000-000000000001';
+    const cancelledOrder = {
+      orderId,
+      customerId,
+      orderStatus: 'CANCELLED',
+      orderItems: [],
+      paymentTransactions: [],
+    };
+    const prisma = {
+      order: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ orderId })
+          .mockResolvedValueOnce(cancelledOrder),
+      },
+    };
+    const orderExpirationService = {
+      expireOrderIfDue: jest.fn().mockResolvedValue(true),
+    };
+    const service = new OrdersService(
+      prisma as any,
+      orderExpirationService as any,
+    );
+
+    await expect(service.getOrderDetails(customerId, orderId)).resolves.toBe(
+      cancelledOrder,
+    );
+    expect(orderExpirationService.expireOrderIfDue).toHaveBeenCalledWith(
+      orderId,
+    );
   });
 });

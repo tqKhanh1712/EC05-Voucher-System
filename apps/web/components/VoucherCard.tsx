@@ -169,10 +169,10 @@ export default function VoucherCard({ campaign: c, index = 0 }: VoucherCardProps
           ) : (
             <div className="flex items-center gap-2">
               <div
-                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-primary/10 bg-primary/5 px-4 py-2.5 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-white"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-primary/10 bg-primary/5 px-4 py-2.5 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-white group-has-[button:hover]:!bg-primary/5 group-has-[button:hover]:!text-primary group-has-[button:focus-visible]:!bg-primary/5 group-has-[button:focus-visible]:!text-primary"
               >
                 Xem chi tiết
-                <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-has-[button:hover]:!translate-x-0 group-has-[button:focus-visible]:!translate-x-0" aria-hidden="true" />
               </div>
 
               <button
